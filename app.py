@@ -47,12 +47,27 @@ def generate_pdf(data):
             c.drawImage(logo_img, logo_x, y_start + 0.5*cm, width=logo_w, height=logo_h, preserveAspectRatio=True)
 
         # Τιμή με Stretch (Scale)
+        # draw the price with vertical stretch
         c.saveState()
         c.scale(1, 1.5) 
         c.setFont("Helvetica-Bold", data['int_size'])
-        y_pos = (quad_top - 6*cm) / 1.5 # Προσαρμογή ύψους λόγω scale
+        y_pos = (quad_top - 6*cm) / 1.5  # Προσαρμογή ύψους λόγω scale
         c.drawCentredString(x_start + 5.25*cm, y_pos, data['prices'][i])
         c.restoreState()
+
+        # after unscaling, draw euro symbol without stretch
+        price = data['prices'][i]
+        # compute text width using the same font size as the price
+        text_width = c.stringWidth(price, "Helvetica-Bold", data['int_size'])
+        center_x = x_start + 5.25*cm
+        euro_font_size = 30
+        # final y coordinate unscaled
+        y_euro = quad_top - 6*cm
+        # position euro sign just to the right of the price text
+        spacing = 2  # points of padding
+        euro_x = center_x + text_width/2 + spacing
+        c.setFont("Helvetica-Bold", euro_font_size)
+        c.drawString(euro_x, y_euro, "€")
         
         # Περιγραφή
         p = Paragraph(data['descs'][i], style)
@@ -76,7 +91,22 @@ int_size = st.sidebar.slider("", 50, 150, 120)
 st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Περιγραφής</span>", unsafe_allow_html=True)
 desc_size = st.sidebar.slider("", 10, 50, 30)
 
-logo_file = st.file_uploader("Ανέβασμα Λογοτύπου", type=["png", "jpg", "jpeg"])
+# styled title for logo uploader matching other headings
+st.markdown("<span style='font-size:20px; font-weight:bold;'>Ανέβασμα Λογοτύπου</span>", unsafe_allow_html=True)
+# remove default label so widget appears directly under title
+logo_file = st.file_uploader("", type=["png", "jpg", "jpeg"])
+
+# tighten spacing between labels and their inputs via small CSS hack
+st.markdown("""
+    <style>
+    /* reduce bottom margin on widget rows to bring inputs closer to titles */
+    div[data-baseweb="file-uploader"],
+    div.stTextInput, div.stTextArea {
+        margin-top: 0.2rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # main inputs for four labels
 descs = []
