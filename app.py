@@ -5,10 +5,27 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader  # Αυτό επιλύει το σφάλμα της εικόνας
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 
+# register Arial Bold font (assumes font file available in system)
+# common filename 'arialbd.ttf'; fall back silently if missing
+FONT_NAME = 'Helvetica-Bold'  # default
+try:
+    pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
+    FONT_NAME = 'Arial-Bold'
+except Exception:
+    try:
+        pdfmetrics.registerFont(TTFont('Arial-Bold', 'Arial Bold.ttf'))
+        FONT_NAME = 'Arial-Bold'
+    except Exception:
+        # registration failed; keep default FONT_NAME
+        pass
+
 # Ρυθμίσεις σελίδας
-st.set_page_config(page_title="Εκτυπωτής Ετικετών", layout="wide")
+# you can specify a page_icon (emoji or path to image) for the app
+st.set_page_config(page_title="Εκτυπωτής Ετικετών", page_icon="🏷️", layout="wide")
 
 st.title("🏷️ Εκτυπωτής Ετικετών (Web Version)")
 
@@ -58,9 +75,7 @@ def generate_pdf(data):
         price_zone_x0 = x_start + 0.8 * cm
         price_zone_width = label_w - 1.6 * cm
 
-        center_x = x_start + label_w / 2
-        baseline_y = price_zone_bottom
-
+        # parse price into integer and decimal parts (comma included)
         price = data['prices'][i]
         if "," in price:
             int_part, frac = price.split(",", 1)
@@ -69,45 +84,75 @@ def generate_pdf(data):
             int_part = price
             dec_part = ""
 
-        int_width = c.stringWidth(int_part, "Helvetica-Bold", data['int_size'])
-        dec_width = c.stringWidth(dec_part, "Helvetica-Bold", data['int_size']) if dec_part else 0
-        total_width = int_width + dec_width
+        # areas relative to the top/left of the label (no print margins)
+        # integer area: 0.8–6.8cm vertical, 0.6–4.7cm horizontal
+        int_top_offset = 0.8 * cm
+        int_bottom_offset = 6.8 * cm
+        int_left_offset = 0.6 * cm
+        int_right_offset = 4.7 * cm
+        int_height_area = int_bottom_offset - int_top_offset   # 6.0cm
+        int_area_right_x = x_start + int_right_offset
+        baseline_y = quad_top - int_bottom_offset               # bottom of int area
 
-        # horizontal scaling to fit available width
-        h_scale = 1.0
-        if total_width > price_zone_width:
-            h_scale = price_zone_width / total_width
-            total_width *= h_scale
+        # compute vertical scale to fill the area
+        v_scale_int = int_height_area / data['int_size']
 
-        # vertical scaling
-        int_target_height = price_zone_height
-        dec_target_height = ((quad_top - 1.5 * cm) - price_zone_bottom)
-        if dec_target_height > price_zone_height:
-            dec_target_height = price_zone_height
-        v_scale_int = int_target_height / data['int_size']
-        v_scale_dec = dec_target_height / data['int_size']
+        # decimal area: 1.5–6.8cm vertical, 4.9–9.1cm horizontal
+        dec_top_offset = 1.5 * cm
+        dec_bottom_offset = 6.8 * cm
+        dec_left_offset = 4.9 * cm
+        dec_right_offset = 9.1 * cm
+        dec_height_area = dec_bottom_offset - dec_top_offset   # 5.3cm
+        dec_area_right_x = x_start + dec_right_offset
+        dec_area_left_x = x_start + dec_left_offset
+        # note bottom of decimal area is same as integer
 
-        start_left = center_x - total_width / 2
+        v_scale_dec = dec_height_area / data['int_size']
 
+        # compute widths of each part (unscaled)
+        int_width = c.stringWidth(int_part, FONT_NAME, data['int_size'])
+        dec_width = c.stringWidth(dec_part, FONT_NAME, data['int_size']) if dec_part else 0
+
+        # compute horizontal scale to fit widths into their areas
+        int_area_left_x = x_start + int_left_offset
+        int_area_width = int_right_offset - int_left_offset
+        h_scale_int = 1.0
+        if int_width > 0 and int_width > int_area_width:
+            h_scale_int = int_area_width / int_width
+
+        dec_area_width = dec_right_offset - dec_left_offset
+        h_scale_dec = 1.0
+        if dec_width > 0 and dec_width > dec_area_width:
+            h_scale_dec = dec_area_width / dec_width
+
+        # draw integer part right-aligned, bottom-aligned with both scales
+        scaled_int_width = int_width * h_scale_int
+        start_x_int = int_area_right_x - scaled_int_width
         c.saveState()
-        c.scale(h_scale, v_scale_int)
-        c.setFont("Helvetica-Bold", data['int_size'])
-        c.drawString(start_left / h_scale, baseline_y / v_scale_int, int_part)
+        c.scale(h_scale_int, v_scale_int)
+        c.setFont(FONT_NAME, data['int_size'])
+        c.drawString(start_x_int / h_scale_int, baseline_y / v_scale_int, int_part)
         c.restoreState()
 
+        # draw decimal part if exists
         if dec_part:
+            scaled_dec_width = dec_width * h_scale_dec
+            start_x_dec = dec_area_right_x - scaled_dec_width
             c.saveState()
-            c.scale(h_scale, v_scale_dec)
-            c.setFont("Helvetica-Bold", data['int_size'])
-            c.drawString((start_left + int_width) / h_scale, baseline_y / v_scale_dec, dec_part)
+            c.scale(h_scale_dec, v_scale_dec)
+            c.setFont(FONT_NAME, data['int_size'])
+            c.drawString(start_x_dec / h_scale_dec, baseline_y / v_scale_dec, dec_part)
             c.restoreState()
 
-        euro_x = start_left + total_width + 2
-        euro_font = data['int_size']
+        # euro symbol area: 9.3–10.1cm horizontal, font size fixed at 30
+        euro_right_offset = 10.1 * cm
+        euro_area_right_x = x_start + euro_right_offset
+        euro_font = 30
+        euro_width = c.stringWidth("€", FONT_NAME, euro_font)
+        euro_x = euro_area_right_x - euro_width
         c.saveState()
-        c.scale(h_scale, 1)
-        c.setFont("Helvetica-Bold", euro_font)
-        c.drawString(euro_x / h_scale, baseline_y, "€")
+        c.setFont(FONT_NAME, euro_font)
+        c.drawString(euro_x, baseline_y, "€")
         c.restoreState()
 
         # --- description zone ------------------------------------------------
@@ -181,17 +226,36 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # main inputs for four labels
+# add CSS for framing each label's inputs
+st.markdown("""
+    <style>
+    .label-box {
+        border: 1px solid #ccc;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+    }
+    </style>
+""", unsafe_allow_html=True)
 descs = []
 prices = []
 cols = st.columns(2)
 for i in range(4):
     with cols[i % 2]:
-        # custom styled labels for inputs
+        # wrap this label's controls in a box
+        st.markdown("<div class='label-box'>", unsafe_allow_html=True)
+        # input titles
         st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Περιγραφή {i+1}</span>", unsafe_allow_html=True)
-        # provide unique keys to avoid duplicate element IDs
-        descs.append(st.text_area("", height=60, key=f"desc_{i}"))
+        # provide unique keys and capture values
+        desc_val = st.text_area("", height=60, key=f"desc_{i}")
         st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Τιμή {i+1}</span>", unsafe_allow_html=True)
-        prices.append(st.text_input("", "0,00", key=f"price_{i}"))
+        price_val = st.text_input("", "0,00", key=f"price_{i}")
+
+        # append values for later PDF generation
+        descs.append(desc_val)
+        prices.append(price_val)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # generate/download PDF when requested
 if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
