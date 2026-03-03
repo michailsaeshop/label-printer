@@ -31,22 +31,35 @@ def generate_pdf(data):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     w, h = A4
-    quads = [(0, h/2), (w/2, h/2), (0, 0), (w/2, 0)]
+    # each label occupies one quarter of the A4 page
+    label_w = w / 2
+    label_h = h / 2
+    # corners of the four label quadrants (lower-left origin coordinates)
+    quads = [
+        (0, label_h),
+        (label_w, label_h),
+        (0, 0),
+        (label_w, 0)
+    ]
     
     style = ParagraphStyle(name='C', fontSize=data['desc_size'], leading=data['desc_size']+4, alignment=1)
 
     for i in range(4):
         x_start, y_start = quads[i]
-        quad_top = y_start + (h/2)
-        label_height = h/2
+        quad_top = y_start + label_h
 
-        # --- price zone (0 → 6.5 cm from top) --------------------------------
-        # determine centers of specified zones
-        center_x = x_start + 5.25 * cm
-        # integer zone center: from 1cm to 6cm -> midpoint 3.5cm from top
-        int_baseline = quad_top - 3.5 * cm
-        # decimal zone center: from 1.8cm to 6cm -> midpoint 3.9cm from top
-        dec_baseline = quad_top - 3.9 * cm
+        # --- price zone -----------------------------------------------------
+        # from 1cm down to 6.8cm from the label top, with 0.8cm side margins
+        PRICE_ZONE_TOP_MARGIN = 1 * cm
+        PRICE_ZONE_BOTTOM_MARGIN = 6.8 * cm
+        price_zone_top = quad_top - PRICE_ZONE_TOP_MARGIN
+        price_zone_bottom = quad_top - PRICE_ZONE_BOTTOM_MARGIN
+        price_zone_height = price_zone_top - price_zone_bottom
+        price_zone_x0 = x_start + 0.8 * cm
+        price_zone_width = label_w - 1.6 * cm
+
+        center_x = x_start + label_w / 2
+        baseline_y = price_zone_bottom
 
         price = data['prices'][i]
         if "," in price:
@@ -56,57 +69,82 @@ def generate_pdf(data):
             int_part = price
             dec_part = ""
 
-        # measure widths for centering
         int_width = c.stringWidth(int_part, "Helvetica-Bold", data['int_size'])
-        dec_width = 0
-        if dec_part:
-            dec_size = data['int_size'] * 0.85
-            dec_width = c.stringWidth(dec_part, "Helvetica-Bold", dec_size)
+        dec_width = c.stringWidth(dec_part, "Helvetica-Bold", data['int_size']) if dec_part else 0
         total_width = int_width + dec_width
+
+        # horizontal scaling to fit available width
+        h_scale = 1.0
+        if total_width > price_zone_width:
+            h_scale = price_zone_width / total_width
+            total_width *= h_scale
+
+        # vertical scaling
+        int_target_height = price_zone_height
+        dec_target_height = ((quad_top - 1.5 * cm) - price_zone_bottom)
+        if dec_target_height > price_zone_height:
+            dec_target_height = price_zone_height
+        v_scale_int = int_target_height / data['int_size']
+        v_scale_dec = dec_target_height / data['int_size']
+
         start_left = center_x - total_width / 2
 
-        # draw integer part stretched vertically covering 1–6cm zone
         c.saveState()
-        c.scale(1, 1.5)
+        c.scale(h_scale, v_scale_int)
         c.setFont("Helvetica-Bold", data['int_size'])
-        c.drawString(start_left, int_baseline / 1.5, int_part)
+        c.drawString(start_left / h_scale, baseline_y / v_scale_int, int_part)
         c.restoreState()
 
-        # draw decimal part stretched vertically covering 1.8–6cm zone
-        y_euro = dec_baseline  # use decimal baseline for euro alignment as well
         if dec_part:
             c.saveState()
-            c.scale(1, 1.2)
-            c.setFont("Helvetica-Bold", dec_size)
-            c.drawString(start_left + int_width + 1, dec_baseline / 1.2, dec_part)
+            c.scale(h_scale, v_scale_dec)
+            c.setFont("Helvetica-Bold", data['int_size'])
+            c.drawString((start_left + int_width) / h_scale, baseline_y / v_scale_dec, dec_part)
             c.restoreState()
 
-        # euro symbol after decimals, unscaled
-        spacing = 2  # points of padding
-        euro_x = center_x + total_width/2 + spacing
-        euro_font_size = 30
-        c.setFont("Helvetica-Bold", euro_font_size)
-        c.drawString(euro_x, y_euro, "€")
+        euro_x = start_left + total_width + 2
+        euro_font = data['int_size']
+        c.saveState()
+        c.scale(h_scale, 1)
+        c.setFont("Helvetica-Bold", euro_font)
+        c.drawString(euro_x / h_scale, baseline_y, "€")
+        c.restoreState()
 
-        # --- description zone (6.8 → 11 cm from top) -------------------------
-        zone_top = quad_top - 6.8 * cm
-        zone_bottom = quad_top - 11 * cm
-        zone_height = zone_top - zone_bottom
+        # --- description zone ------------------------------------------------
+        DESC_ZONE_TOP_MARGIN = 7.3 * cm
+        DESC_ZONE_BOTTOM_MARGIN = 10.8 * cm
+        desc_zone_top = quad_top - DESC_ZONE_TOP_MARGIN
+        desc_zone_bottom = quad_top - DESC_ZONE_BOTTOM_MARGIN
+        desc_zone_height = desc_zone_top - desc_zone_bottom
+        desc_zone_x0 = x_start + 0.8 * cm
+        desc_zone_width = label_w - 1.6 * cm
+
         p = Paragraph(data['descs'][i], style)
-        p.wrap(9 * cm, zone_height)
-        # center vertically inside the zone
-        desc_bottom = zone_bottom + (zone_height - p.height) / 2
-        p.drawOn(c, x_start + (10.5 * cm - 9 * cm) / 2, desc_bottom)
+        p.wrap(desc_zone_width, desc_zone_height)
+        desc_x = desc_zone_x0
+        desc_y = desc_zone_top - p.height
+        p.drawOn(c, desc_x, desc_y)
 
-        # --- logo zone (11.2 cm from top to bottom) ---------------------------
+        # --- logo zone -------------------------------------------------------
+        LOGO_ZONE_BOTTOM_MARGIN = 0.5 * cm
+        LOGO_ZONE_TOP_MARGIN = 4 * cm
+        logo_zone_bottom = y_start + LOGO_ZONE_BOTTOM_MARGIN
+        logo_zone_top = y_start + LOGO_ZONE_TOP_MARGIN
+        logo_zone_height = logo_zone_top - logo_zone_bottom
+        logo_zone_x0 = x_start + 1 * cm
+        logo_zone_width = label_w - 2 * cm
+
         if data['logo']:
             logo_img = ImageReader(data['logo'])
-            logo_w, logo_h = 8.4 * cm, 3.84 * cm
-            logo_x = x_start + (10.5 * cm - logo_w) / 2
-            # position so that the top of the image is 11.2cm below quad_top
-            logo_top = quad_top - 11.2 * cm
-            logo_y = logo_top - logo_h
-            c.drawImage(logo_img, logo_x, logo_y, width=logo_w, height=logo_h, preserveAspectRatio=True)
+            c.drawImage(
+                logo_img,
+                logo_zone_x0,
+                logo_zone_bottom,
+                width=logo_zone_width,
+                height=logo_zone_height,
+                preserveAspectRatio=True,
+                anchor='c',
+            )
 
     draw_crop_marks(c, w, h)
     c.save()
