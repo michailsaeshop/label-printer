@@ -18,10 +18,10 @@ def draw_crop_marks(c, w, h):
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(0.5)
     # Σταυρός στο κέντρο
-    c.line(w/2 - 0.8*cm, h/2, w/2 + 0.8*cm, h/2)
-    c.line(w/2, h/2 - 0.8*cm, w/2, h/2 + 0.8*cm)
+    c.line(w/2 - 0.3*cm, h/2, w/2 + 0.3*cm, h/2)
+    c.line(w/2, h/2 - 0.3*cm, w/2, h/2 + 0.3*cm)
     # Σημάδια στις πλευρές
-    offset = 0.5 * cm
+    offset = 0.3 * cm
     c.line(w/2, h - offset, w/2, h - offset - length)
     c.line(w/2, offset, w/2, offset + length)
     c.line(offset, h/2, offset + length, h/2)
@@ -38,41 +38,75 @@ def generate_pdf(data):
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + (h/2)
-        
-        # Λογότυπο με χρήση ImageReader για αποφυγή σφαλμάτων διαδρομής
+        label_height = h/2
+
+        # --- price zone (0 → 6.5 cm from top) --------------------------------
+        # determine centers of specified zones
+        center_x = x_start + 5.25 * cm
+        # integer zone center: from 1cm to 6cm -> midpoint 3.5cm from top
+        int_baseline = quad_top - 3.5 * cm
+        # decimal zone center: from 1.8cm to 6cm -> midpoint 3.9cm from top
+        dec_baseline = quad_top - 3.9 * cm
+
+        price = data['prices'][i]
+        if "," in price:
+            int_part, frac = price.split(",", 1)
+            dec_part = "," + frac
+        else:
+            int_part = price
+            dec_part = ""
+
+        # measure widths for centering
+        int_width = c.stringWidth(int_part, "Helvetica-Bold", data['int_size'])
+        dec_width = 0
+        if dec_part:
+            dec_size = data['int_size'] * 0.85
+            dec_width = c.stringWidth(dec_part, "Helvetica-Bold", dec_size)
+        total_width = int_width + dec_width
+        start_left = center_x - total_width / 2
+
+        # draw integer part stretched vertically covering 1–6cm zone
+        c.saveState()
+        c.scale(1, 1.5)
+        c.setFont("Helvetica-Bold", data['int_size'])
+        c.drawString(start_left, int_baseline / 1.5, int_part)
+        c.restoreState()
+
+        # draw decimal part stretched vertically covering 1.8–6cm zone
+        y_euro = dec_baseline  # use decimal baseline for euro alignment as well
+        if dec_part:
+            c.saveState()
+            c.scale(1, 1.2)
+            c.setFont("Helvetica-Bold", dec_size)
+            c.drawString(start_left + int_width + 1, dec_baseline / 1.2, dec_part)
+            c.restoreState()
+
+        # euro symbol after decimals, unscaled
+        spacing = 2  # points of padding
+        euro_x = center_x + total_width/2 + spacing
+        euro_font_size = 30
+        c.setFont("Helvetica-Bold", euro_font_size)
+        c.drawString(euro_x, y_euro, "€")
+
+        # --- description zone (6.8 → 11 cm from top) -------------------------
+        zone_top = quad_top - 6.8 * cm
+        zone_bottom = quad_top - 11 * cm
+        zone_height = zone_top - zone_bottom
+        p = Paragraph(data['descs'][i], style)
+        p.wrap(9 * cm, zone_height)
+        # center vertically inside the zone
+        desc_bottom = zone_bottom + (zone_height - p.height) / 2
+        p.drawOn(c, x_start + (10.5 * cm - 9 * cm) / 2, desc_bottom)
+
+        # --- logo zone (11.2 cm from top to bottom) ---------------------------
         if data['logo']:
             logo_img = ImageReader(data['logo'])
             logo_w, logo_h = 8.4 * cm, 3.84 * cm
-            logo_x = x_start + (10.5*cm - logo_w) / 2
-            c.drawImage(logo_img, logo_x, y_start + 0.5*cm, width=logo_w, height=logo_h, preserveAspectRatio=True)
-
-        # Τιμή με Stretch (Scale)
-        # draw the price with vertical stretch
-        c.saveState()
-        c.scale(1, 1.5) 
-        c.setFont("Helvetica-Bold", data['int_size'])
-        y_pos = (quad_top - 6*cm) / 1.5  # Προσαρμογή ύψους λόγω scale
-        c.drawCentredString(x_start + 5.25*cm, y_pos, data['prices'][i])
-        c.restoreState()
-
-        # after unscaling, draw euro symbol without stretch
-        price = data['prices'][i]
-        # compute text width using the same font size as the price
-        text_width = c.stringWidth(price, "Helvetica-Bold", data['int_size'])
-        center_x = x_start + 5.25*cm
-        euro_font_size = 30
-        # final y coordinate unscaled
-        y_euro = quad_top - 6*cm
-        # position euro sign just to the right of the price text
-        spacing = 2  # points of padding
-        euro_x = center_x + text_width/2 + spacing
-        c.setFont("Helvetica-Bold", euro_font_size)
-        c.drawString(euro_x, y_euro, "€")
-        
-        # Περιγραφή
-        p = Paragraph(data['descs'][i], style)
-        p.wrap(9*cm, 4*cm)
-        p.drawOn(c, x_start + (10.5*cm - 9*cm)/2, quad_top - 7*cm)
+            logo_x = x_start + (10.5 * cm - logo_w) / 2
+            # position so that the top of the image is 11.2cm below quad_top
+            logo_top = quad_top - 11.2 * cm
+            logo_y = logo_top - logo_h
+            c.drawImage(logo_img, logo_x, logo_y, width=logo_w, height=logo_h, preserveAspectRatio=True)
 
     draw_crop_marks(c, w, h)
     c.save()
@@ -123,12 +157,21 @@ for i in range(4):
 
 # generate/download PDF when requested
 if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
-    data = {
-        'descs': descs,
-        'prices': prices,
-        'logo': logo_file,
-        'int_size': int_size,
-        'desc_size': desc_size,
-    }
-    pdf = generate_pdf(data)
-    st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
+        data = {
+            'descs': descs,
+            'prices': prices,
+            'logo': logo_file,
+            'int_size': int_size,
+            'desc_size': desc_size,
+        }
+        pdf = generate_pdf(data)
+        # show preview below the button
+        try:
+            import base64
+            pdf.seek(0)
+            b64 = base64.b64encode(pdf.read()).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="400px"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+        except Exception:
+            pass
+        st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
