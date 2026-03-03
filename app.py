@@ -67,21 +67,38 @@ def generate_pdf(data):
 
 
 # --- GUI ---
+
 st.sidebar.header("Ρυθμίσεις")
-int_size = st.sidebar.slider("Μέγεθος Τιμής", 50, 150, 120)
-desc_size = st.sidebar.slider("Μέγεθος Περιγραφής", 10, 50, 30)
+# styled sliders with bold, larger labels
+st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Τιμής</span>", unsafe_allow_html=True)
+int_size = st.sidebar.slider("", 50, 150, 120)
 
-logo_file = st.file_uploader("Ανέβασμα Λογοτύπου", type=['png', 'jpg', 'jpeg'])
+st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Περιγραφής</span>", unsafe_allow_html=True)
+desc_size = st.sidebar.slider("", 10, 50, 30)
 
+logo_file = st.file_uploader("Ανέβασμα Λογοτύπου", type=["png", "jpg", "jpeg"])
+
+# main inputs for four labels
 descs = []
 prices = []
 cols = st.columns(2)
 for i in range(4):
     with cols[i % 2]:
-        descs.append(st.text_area(f"Περιγραφή {i+1}", height=60))
-        prices.append(st.text_input(f"Τιμή {i+1}", "0,00"))
+        # custom styled labels for inputs
+        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Περιγραφή {i+1}</span>", unsafe_allow_html=True)
+        # provide unique keys to avoid duplicate element IDs
+        descs.append(st.text_area("", height=60, key=f"desc_{i}"))
+        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Τιμή {i+1}</span>", unsafe_allow_html=True)
+        prices.append(st.text_input("", "0,00", key=f"price_{i}"))
 
+# generate/download PDF when requested
 if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
-    data = {'descs': descs, 'prices': prices, 'logo': logo_file, 'int_size': int_size, 'desc_size': desc_size}
+    data = {
+        'descs': descs,
+        'prices': prices,
+        'logo': logo_file,
+        'int_size': int_size,
+        'desc_size': desc_size,
+    }
     pdf = generate_pdf(data)
     st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
