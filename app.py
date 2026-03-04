@@ -96,7 +96,7 @@ def generate_pdf(data):
         # comma will always be drawn at a fixed font size so we need to keep
         # it separate from the digit string.
         price = data['prices'][i]
-        comma_size = 70  # points fixed size for comma
+        comma_size = 60  # points fixed size for comma
         if "," in price:
             int_part, frac = price.split(",", 1)
             comma_char = ","
@@ -305,13 +305,5 @@ if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
             'desc_size': desc_size,
         }
         pdf = generate_pdf(data)
-        # show preview below the button
-        try:
-            import base64
-            pdf.seek(0)
-            b64 = base64.b64encode(pdf.read()).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="400px"></iframe>'
-            st.markdown(pdf_display, unsafe_allow_html=True)
-        except Exception:
-            pass
+        # preview removed per user request; only provide download link
         st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
