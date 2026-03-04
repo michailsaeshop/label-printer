@@ -9,9 +9,13 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 
-# register Arial Bold font (assumes font file available in system)
-# common filename 'arialbd.ttf'; fall back silently if missing
-FONT_NAME = 'Helvetica-Bold'  # default
+# register a TrueType font that supports Greek accents
+# prefer Arial Bold if available, otherwise fall back to DejaVu Sans (common
+# on Debian-based systems).  In any case FONT_NAME must point to a font
+# with Unicode support so accented characters render correctly.
+FONT_NAME = 'Helvetica-Bold'  # fallback PDF standard font (limited glyph set)
+
+# try Arial Bold first
 try:
     pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
     FONT_NAME = 'Arial-Bold'
@@ -20,8 +24,17 @@ except Exception:
         pdfmetrics.registerFont(TTFont('Arial-Bold', 'Arial Bold.ttf'))
         FONT_NAME = 'Arial-Bold'
     except Exception:
-        # registration failed; keep default FONT_NAME
-        pass
+        # now try DejaVu Sans family which has excellent Unicode coverage
+        try:
+            pdfmetrics.registerFont(TTFont('DejaVuSans',
+                                           '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+            pdfmetrics.registerFont(TTFont('DejaVuSans-Bold',
+                                           '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'))
+            FONT_NAME = 'DejaVuSans-Bold'
+        except Exception:
+            # if everything fails we keep Helvetica-Bold and Greek may look
+            # wrong
+            pass
 
 # Ρυθμίσεις σελίδας
 # you can specify a page_icon (emoji or path to image) for the app
@@ -59,35 +72,44 @@ def generate_pdf(data):
         (label_w, 0)
     ]
     
-    style = ParagraphStyle(name='C', fontSize=data['desc_size'], leading=data['desc_size']+4, alignment=1)
+    # use the same FONT_NAME for paragraph text so that Greek characters
+    # are rendered with the registered unicode font
+    style = ParagraphStyle(name='C', fontName=FONT_NAME,
+                           fontSize=data['desc_size'], leading=data['desc_size']+4,
+                           alignment=1)
 
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + label_h
 
         # --- price zone -----------------------------------------------------
-        # from 1cm down to 6.8cm from the label top, with 0.8cm side margins
+        # from 1cm down to 6.6cm from the label top, with 0.8cm side margins
         PRICE_ZONE_TOP_MARGIN = 1 * cm
-        PRICE_ZONE_BOTTOM_MARGIN = 6.8 * cm
+        PRICE_ZONE_BOTTOM_MARGIN = 6.6 * cm
         price_zone_top = quad_top - PRICE_ZONE_TOP_MARGIN
         price_zone_bottom = quad_top - PRICE_ZONE_BOTTOM_MARGIN
         price_zone_height = price_zone_top - price_zone_bottom
         price_zone_x0 = x_start + 0.8 * cm
         price_zone_width = label_w - 1.6 * cm
 
-        # parse price into integer and decimal parts (comma included)
+        # parse price into integer, comma, and fractional parts.  The
+        # comma will always be drawn at a fixed font size so we need to keep
+        # it separate from the digit string.
         price = data['prices'][i]
+        comma_size = 70  # points fixed size for comma
         if "," in price:
             int_part, frac = price.split(",", 1)
-            dec_part = "," + frac
+            comma_char = ","
+            frac_part = frac
         else:
             int_part = price
-            dec_part = ""
+            comma_char = ""
+            frac_part = ""
 
         # areas relative to the top/left of the label (no print margins)
-        # integer area: 0.8–6.8cm vertical, 0.6–4.7cm horizontal
+        # integer area: 0.8–6.6cm vertical, 0.6–4.7cm horizontal
         int_top_offset = 0.8 * cm
-        int_bottom_offset = 6.8 * cm
+        int_bottom_offset = 6.6 * cm
         int_left_offset = 0.6 * cm
         int_right_offset = 4.7 * cm
         int_height_area = int_bottom_offset - int_top_offset   # 6.0cm
@@ -97,9 +119,9 @@ def generate_pdf(data):
         # compute vertical scale to fill the area
         v_scale_int = int_height_area / data['int_size']
 
-        # decimal area: 1.5–6.8cm vertical, 4.9–9.1cm horizontal
+        # decimal area: 1.5–6.6cm vertical, 4.9–9.1cm horizontal
         dec_top_offset = 1.5 * cm
-        dec_bottom_offset = 6.8 * cm
+        dec_bottom_offset = 6.6 * cm
         dec_left_offset = 4.9 * cm
         dec_right_offset = 9.1 * cm
         dec_height_area = dec_bottom_offset - dec_top_offset   # 5.3cm
@@ -109,9 +131,11 @@ def generate_pdf(data):
 
         v_scale_dec = dec_height_area / data['int_size']
 
-        # compute widths of each part (unscaled)
+        # compute widths of each part (unscaled).  Treat comma separately
+        # because of its fixed size.
         int_width = c.stringWidth(int_part, FONT_NAME, data['int_size'])
-        dec_width = c.stringWidth(dec_part, FONT_NAME, data['int_size']) if dec_part else 0
+        comma_width = c.stringWidth(comma_char, FONT_NAME, comma_size) if comma_char else 0
+        frac_width = c.stringWidth(frac_part, FONT_NAME, data['int_size']) if frac_part else 0
 
         # compute horizontal scale to fit widths into their areas
         int_area_left_x = x_start + int_left_offset
@@ -121,9 +145,11 @@ def generate_pdf(data):
             h_scale_int = int_area_width / int_width
 
         dec_area_width = dec_right_offset - dec_left_offset
-        h_scale_dec = 1.0
-        if dec_width > 0 and dec_width > dec_area_width:
-            h_scale_dec = dec_area_width / dec_width
+        # digits in fractional part can only use space left after comma
+        available_frac_width = dec_area_width - comma_width
+        h_scale_frac = 1.0
+        if frac_width > 0 and frac_width > available_frac_width:
+            h_scale_frac = available_frac_width / frac_width
 
         # draw integer part right-aligned, bottom-aligned with both scales
         scaled_int_width = int_width * h_scale_int
@@ -134,15 +160,27 @@ def generate_pdf(data):
         c.drawString(start_x_int / h_scale_int, baseline_y / v_scale_int, int_part)
         c.restoreState()
 
-        # draw decimal part if exists
-        if dec_part:
-            scaled_dec_width = dec_width * h_scale_dec
-            start_x_dec = dec_area_right_x - scaled_dec_width
-            c.saveState()
-            c.scale(h_scale_dec, v_scale_dec)
-            c.setFont(FONT_NAME, data['int_size'])
-            c.drawString(start_x_dec / h_scale_dec, baseline_y / v_scale_dec, dec_part)
-            c.restoreState()
+        # draw comma and fractional digits if any
+        if comma_char or frac_part:
+            scaled_frac_width = frac_width * h_scale_frac
+            total_dec_width = comma_width + scaled_frac_width
+            start_x_dec = dec_area_right_x - total_dec_width
+
+            # comma drawn at fixed size
+            if comma_char:
+                c.saveState()
+                c.setFont(FONT_NAME, comma_size)
+                c.drawString(start_x_dec, baseline_y, comma_char)
+                c.restoreState()
+
+            # fractional digits scaled
+            if frac_part:
+                frac_x = start_x_dec + comma_width
+                c.saveState()
+                c.scale(h_scale_frac, v_scale_dec)
+                c.setFont(FONT_NAME, data['int_size'])
+                c.drawString(frac_x / h_scale_frac, baseline_y / v_scale_dec, frac_part)
+                c.restoreState()
 
         # euro symbol area: 9.3–10.1cm horizontal, font size fixed at 30
         euro_right_offset = 10.1 * cm
