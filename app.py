@@ -11844,9 +11844,9 @@ FONT_NAME = _register_inline_font()
 
 # Ρυθμίσεις σελίδας
 # you can specify a page_icon (emoji or path to image) for the app
-st.set_page_config(page_title="Εκτυπωτής Ετικετών", page_icon="🏷️", layout="wide")
+st.set_page_config(page_title="Καρτελάκια Τιμών", page_icon="🏷️", layout="wide")
 
-st.title("🏷️ Εκτυπωτής Ετικετών (Web Version)")
+st.title("🏷️ Καρτελάκια Τιμών")
 
 # --- Συναρτήσεις Σχεδίασης ---
 def draw_crop_marks(c, w, h):
