@@ -12111,9 +12111,9 @@ st.markdown(
         bottom: 0;
         width: 100%;
         background-color: transparent;
-        color: #888888;
+        color: #FF4B4B;
         text-align: left;
-        padding-left: 20px;
+        padding-left: 100px;
         padding-bottom: 10px;
         font-size: 12px;
     }
@@ -12137,4 +12137,5 @@ if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
         pdf = generate_pdf(data)
         # preview removed per user request; only provide download link
         st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
+
 
