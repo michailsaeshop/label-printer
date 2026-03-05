@@ -12101,6 +12101,30 @@ for i in range(4):
         prices.append(price_val)
         st.markdown("</div>", unsafe_allow_html=True)
 
+# --- CSS για το Footer ---
+st.markdown(
+    """
+    <style>
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: transparent;
+        color: #888888;
+        text-align: left;
+        padding-left: 20px;
+        padding-bottom: 10px;
+        font-size: 12px;
+    }
+    </style>
+    <div class="footer">
+        Produced & designed by Apostolos Efthymiou
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 # generate/download PDF when requested
 if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
         data = {
@@ -12113,3 +12137,4 @@ if st.button("ΔΗΜΙΟΥΡΓΙΑ PDF"):
         pdf = generate_pdf(data)
         # preview removed per user request; only provide download link
         st.download_button("Κατέβασμα PDF", pdf, "Tags.pdf", "application/pdf")
+
