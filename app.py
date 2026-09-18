@@ -11868,10 +11868,8 @@ def generate_pdf_vertical(data):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     w, h = A4
-    # each label occupies one quarter of the A4 page
     label_w = w / 2
     label_h = h / 2
-    # corners of the four label quadrants (lower-left origin coordinates)
     quads = [
         (0, label_h),
         (label_w, label_h),
@@ -11879,18 +11877,22 @@ def generate_pdf_vertical(data):
         (label_w, 0)
     ]
     
-    # use the same FONT_NAME for paragraph text so that Greek characters
-    # are rendered with the registered unicode font
-    style = ParagraphStyle(name='C', fontName=FONT_NAME,
-                           fontSize=data['desc_size'], leading=data['desc_size']+4,
-                           alignment=1)
+    style = ParagraphStyle(
+        name='C',
+        fontName=FONT_NAME,
+        fontSize=data['desc_size'],
+        leading=data['desc_size'] + 4,
+        alignment=1
+    )
+
+    # Αν υπάρχει λογότυπο, διαβάζουμε τα bytes μία φορά για να μην "αδειάζει" το stream
+    logo_bytes = data['logo'].getvalue() if data['logo'] is not None else None
 
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + label_h
 
-        # --- price zone -----------------------------------------------------
-        # from 1cm down to 6.6cm from the label top, with 0.8cm side margins
+        # --- price zone ---
         PRICE_ZONE_TOP_MARGIN = 1 * cm
         PRICE_ZONE_BOTTOM_MARGIN = 6.6 * cm
         price_zone_top = quad_top - PRICE_ZONE_TOP_MARGIN
@@ -11899,11 +11901,8 @@ def generate_pdf_vertical(data):
         price_zone_x0 = x_start + 0.8 * cm
         price_zone_width = label_w - 1.6 * cm
 
-        # parse price into integer, comma, and fractional parts.  The
-        # comma will always be drawn at a fixed font size so we need to keep
-        # it separate from the digit string.
         price = data['prices'][i]
-        comma_size = 60  # points fixed size for comma
+        comma_size = 60
         if "," in price:
             int_part, frac = price.split(",", 1)
             comma_char = ","
@@ -11913,38 +11912,30 @@ def generate_pdf_vertical(data):
             comma_char = ""
             frac_part = ""
 
-        # areas relative to the top/left of the label (no print margins)
-        # integer area: 0–6.6cm vertical, 0.6–4.7cm horizontal
         int_top_offset = 0 * cm
         int_bottom_offset = 6.6 * cm
         int_left_offset = 0.6 * cm
         int_right_offset = 4.7 * cm
-        int_height_area = int_bottom_offset - int_top_offset   # 6.6cm
+        int_height_area = int_bottom_offset - int_top_offset
         int_area_right_x = x_start + int_right_offset
-        baseline_y = quad_top - int_bottom_offset               # bottom of int area
+        baseline_y = quad_top - int_bottom_offset
 
-        # compute vertical scale to fill the area
         v_scale_int = int_height_area / data['int_size']
 
-        # decimal area: 1–6.6cm vertical, 4.9–9.1cm horizontal
         dec_top_offset = 1 * cm
         dec_bottom_offset = 6.6 * cm
         dec_left_offset = 4.9 * cm
         dec_right_offset = 9.1 * cm
-        dec_height_area = dec_bottom_offset - dec_top_offset   # 5.6cm
+        dec_height_area = dec_bottom_offset - dec_top_offset
         dec_area_right_x = x_start + dec_right_offset
         dec_area_left_x = x_start + dec_left_offset
-        # note bottom of decimal area is same as integer
 
         v_scale_dec = dec_height_area / data['int_size']
 
-        # compute widths of each part (unscaled).  Treat comma separately
-        # because of its fixed size.
         int_width = c.stringWidth(int_part, FONT_NAME, data['int_size'])
         comma_width = c.stringWidth(comma_char, FONT_NAME, comma_size) if comma_char else 0
         frac_width = c.stringWidth(frac_part, FONT_NAME, data['int_size']) if frac_part else 0
 
-        # compute horizontal scale to fit widths into their areas
         int_area_left_x = x_start + int_left_offset
         int_area_width = int_right_offset - int_left_offset
         h_scale_int = 1.0
@@ -11952,13 +11943,11 @@ def generate_pdf_vertical(data):
             h_scale_int = int_area_width / int_width
 
         dec_area_width = dec_right_offset - dec_left_offset
-        # digits in fractional part can only use space left after comma
         available_frac_width = dec_area_width - comma_width
         h_scale_frac = 1.0
         if frac_width > 0 and frac_width > available_frac_width:
             h_scale_frac = available_frac_width / frac_width
 
-        # draw integer part right-aligned, bottom-aligned with both scales
         scaled_int_width = int_width * h_scale_int
         start_x_int = int_area_right_x - scaled_int_width
         c.saveState()
@@ -11967,20 +11956,17 @@ def generate_pdf_vertical(data):
         c.drawString(start_x_int / h_scale_int, baseline_y / v_scale_int, int_part)
         c.restoreState()
 
-        # draw comma and fractional digits if any
         if comma_char or frac_part:
             scaled_frac_width = frac_width * h_scale_frac
             total_dec_width = comma_width + scaled_frac_width
             start_x_dec = dec_area_right_x - total_dec_width
 
-            # comma drawn at fixed size
             if comma_char:
                 c.saveState()
                 c.setFont(FONT_NAME, comma_size)
                 c.drawString(start_x_dec, baseline_y, comma_char)
                 c.restoreState()
 
-            # fractional digits scaled
             if frac_part:
                 frac_x = start_x_dec + comma_width
                 c.saveState()
@@ -11989,7 +11975,6 @@ def generate_pdf_vertical(data):
                 c.drawString(frac_x / h_scale_frac, baseline_y / v_scale_dec, frac_part)
                 c.restoreState()
 
-        # euro symbol area: 9.3–10.1cm horizontal, font size fixed at 30
         euro_right_offset = 10.1 * cm
         euro_area_right_x = x_start + euro_right_offset
         euro_font = 30
@@ -12000,7 +11985,7 @@ def generate_pdf_vertical(data):
         c.drawString(euro_x, baseline_y, "€")
         c.restoreState()
 
-        # --- description zone ------------------------------------------------
+        # --- description zone ---
         DESC_ZONE_TOP_MARGIN = 7.3 * cm
         DESC_ZONE_BOTTOM_MARGIN = 10.8 * cm
         desc_zone_top = quad_top - DESC_ZONE_TOP_MARGIN
@@ -12015,7 +12000,7 @@ def generate_pdf_vertical(data):
         desc_y = desc_zone_top - p.height
         p.drawOn(c, desc_x, desc_y)
 
-        # --- logo zone -------------------------------------------------------
+        # --- logo zone ---
         LOGO_ZONE_BOTTOM_MARGIN = 0.5 * cm
         LOGO_ZONE_TOP_MARGIN = 4 * cm
         logo_zone_bottom = y_start + LOGO_ZONE_BOTTOM_MARGIN
@@ -12024,8 +12009,8 @@ def generate_pdf_vertical(data):
         logo_zone_x0 = x_start + 1 * cm
         logo_zone_width = label_w - 2 * cm
 
-        if data['logo']:
-            logo_img = ImageReader(data['logo'])
+        if logo_bytes:
+            logo_img = ImageReader(BytesIO(logo_bytes))
             c.drawImage(
                 logo_img,
                 logo_zone_x0,
@@ -12035,17 +12020,23 @@ def generate_pdf_vertical(data):
                 preserveAspectRatio=True,
                 anchor='c',
             )
+            
+    # ΠΡΟΣΘΗΚΗ: Ολοκλήρωση του PDF canvas και επιστροφή του buffer
+    if 'draw_crop_marks' in globals():
+        draw_crop_marks(c, w, h)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
 
 def generate_pdf_horizontal(data):
     buffer = BytesIO()
     page_size = landscape(A4)
     w, h = page_size
     c = canvas.Canvas(buffer, pagesize=page_size)
-   
-    # each label occupies one quarter of the A4 page
+    
     label_w = w / 2
     label_h = h / 2
-    # corners of the four label quadrants (lower-left origin coordinates)
     quads = [
         (0, label_h),
         (label_w, label_h),
@@ -12053,18 +12044,22 @@ def generate_pdf_horizontal(data):
         (label_w, 0)
     ]
     
-    # use the same FONT_NAME for paragraph text so that Greek characters
-    # are rendered with the registered unicode font
-    style = ParagraphStyle(name='C', fontName=FONT_NAME,
-                           fontSize=data['desc_size'], leading=data['desc_size']+4,
-                           alignment=1)
+    style = ParagraphStyle(
+        name='C',
+        fontName=FONT_NAME,
+        fontSize=data['desc_size'],
+        leading=data['desc_size'] + 4,
+        alignment=1
+    )
+
+    # Αν υπάρχει λογότυπο, διαβάζουμε τα bytes μία φορά
+    logo_bytes = data['logo'].getvalue() if data['logo'] is not None else None
 
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + label_h
 
-        # --- price zone -----------------------------------------------------
-        # from 0.5cm down to 4.3cm from the label top, with 0.8cm side margins
+        # --- price zone ---
         PRICE_ZONE_TOP_MARGIN = 0.5 * cm
         PRICE_ZONE_BOTTOM_MARGIN = 4.3 * cm
         price_zone_top = quad_top - PRICE_ZONE_TOP_MARGIN
@@ -12073,11 +12068,8 @@ def generate_pdf_horizontal(data):
         price_zone_x0 = x_start + 0.8 * cm
         price_zone_width = label_w - 1.6 * cm
 
-        # parse price into integer, comma, and fractional parts.  The
-        # comma will always be drawn at a fixed font size so we need to keep
-        # it separate from the digit string.
         price = data['prices'][i]
-        comma_size = 60  # points fixed size for comma
+        comma_size = 60
         if "," in price:
             int_part, frac = price.split(",", 1)
             comma_char = ","
@@ -12087,38 +12079,30 @@ def generate_pdf_horizontal(data):
             comma_char = ""
             frac_part = ""
 
-        # areas relative to the top/left of the label (no print margins)
-        # integer area: 0–4.3cm vertical, 0.6–6cm horizontal
         int_top_offset = 0 * cm
         int_bottom_offset = 4.3 * cm
         int_left_offset = 0.6 * cm
         int_right_offset = 6 * cm
-        int_height_area = int_bottom_offset - int_top_offset   # 4.3cm
+        int_height_area = int_bottom_offset - int_top_offset
         int_area_right_x = x_start + int_right_offset
-        baseline_y = quad_top - int_bottom_offset               # bottom of int area
+        baseline_y = quad_top - int_bottom_offset
 
-        # compute vertical scale to fill the area
         v_scale_int = int_height_area / data['int_size']
 
-        # decimal area: 1–4.3cm vertical, 6.4–11.1cm horizontal
         dec_top_offset = 1 * cm
         dec_bottom_offset = 4.3 * cm
         dec_left_offset = 6.4 * cm
         dec_right_offset = 11.1 * cm
-        dec_height_area = dec_bottom_offset - dec_top_offset   # 3.3cm
+        dec_height_area = dec_bottom_offset - dec_top_offset
         dec_area_right_x = x_start + dec_right_offset
         dec_area_left_x = x_start + dec_left_offset
-        # note bottom of decimal area is same as integer
 
         v_scale_dec = dec_height_area / data['int_size']
 
-        # compute widths of each part (unscaled).  Treat comma separately
-        # because of its fixed size.
         int_width = c.stringWidth(int_part, FONT_NAME, data['int_size'])
         comma_width = c.stringWidth(comma_char, FONT_NAME, comma_size) if comma_char else 0
         frac_width = c.stringWidth(frac_part, FONT_NAME, data['int_size']) if frac_part else 0
 
-        # compute horizontal scale to fit widths into their areas
         int_area_left_x = x_start + int_left_offset
         int_area_width = int_right_offset - int_left_offset
         h_scale_int = 1.0
@@ -12126,13 +12110,11 @@ def generate_pdf_horizontal(data):
             h_scale_int = int_area_width / int_width
 
         dec_area_width = dec_right_offset - dec_left_offset
-        # digits in fractional part can only use space left after comma
         available_frac_width = dec_area_width - comma_width
         h_scale_frac = 1.0
         if frac_width > 0 and frac_width > available_frac_width:
             h_scale_frac = available_frac_width / frac_width
 
-        # draw integer part right-aligned, bottom-aligned with both scales
         scaled_int_width = int_width * h_scale_int
         start_x_int = int_area_right_x - scaled_int_width
         c.saveState()
@@ -12141,20 +12123,17 @@ def generate_pdf_horizontal(data):
         c.drawString(start_x_int / h_scale_int, baseline_y / v_scale_int, int_part)
         c.restoreState()
 
-        # draw comma and fractional digits if any
         if comma_char or frac_part:
             scaled_frac_width = frac_width * h_scale_frac
             total_dec_width = comma_width + scaled_frac_width
             start_x_dec = dec_area_right_x - total_dec_width
 
-            # comma drawn at fixed size
             if comma_char:
                 c.saveState()
                 c.setFont(FONT_NAME, comma_size)
                 c.drawString(start_x_dec, baseline_y, comma_char)
                 c.restoreState()
 
-            # fractional digits scaled
             if frac_part:
                 frac_x = start_x_dec + comma_width
                 c.saveState()
@@ -12163,7 +12142,6 @@ def generate_pdf_horizontal(data):
                 c.drawString(frac_x / h_scale_frac, baseline_y / v_scale_dec, frac_part)
                 c.restoreState()
 
-        # euro symbol area: 11.2–12.5cm horizontal, font size fixed at 30
         euro_right_offset = 12.5 * cm
         euro_area_right_x = x_start + euro_right_offset
         euro_font = 30
@@ -12174,7 +12152,7 @@ def generate_pdf_horizontal(data):
         c.drawString(euro_x, baseline_y, "€")
         c.restoreState()
 
-        # --- description zone ------------------------------------------------
+        # --- description zone ---
         DESC_ZONE_TOP_MARGIN = 4.5 * cm
         DESC_ZONE_BOTTOM_MARGIN = 7 * cm
         desc_zone_top = quad_top - DESC_ZONE_TOP_MARGIN
@@ -12189,7 +12167,7 @@ def generate_pdf_horizontal(data):
         desc_y = desc_zone_top - p.height
         p.drawOn(c, desc_x, desc_y)
 
-        # --- logo zone -------------------------------------------------------
+        # --- logo zone ---
         LOGO_ZONE_BOTTOM_MARGIN = 0.5 * cm
         LOGO_ZONE_TOP_MARGIN = 3.2 * cm
         logo_zone_bottom = y_start + LOGO_ZONE_BOTTOM_MARGIN
@@ -12198,8 +12176,8 @@ def generate_pdf_horizontal(data):
         logo_zone_x0 = x_start + 1 * cm
         logo_zone_width = label_w - 2.5 * cm
 
-        if data['logo']:
-            logo_img = ImageReader(data['logo'])
+        if logo_bytes:
+            logo_img = ImageReader(BytesIO(logo_bytes))
             c.drawImage(
                 logo_img,
                 logo_zone_x0,
@@ -12209,44 +12187,33 @@ def generate_pdf_horizontal(data):
                 preserveAspectRatio=True,
                 anchor='c',
             )
-    draw_crop_marks(c, w, h)
+
+    if 'draw_crop_marks' in globals():
+        draw_crop_marks(c, w, h)
     c.save()
     buffer.seek(0)
     return buffer
 
 
-
 # --- GUI ---
 
 st.sidebar.header("Ρυθμίσεις")
-# styled sliders with bold, larger labels
 st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Τιμής</span>", unsafe_allow_html=True)
 int_size = st.sidebar.slider("", 50, 150, 120)
 
 st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Περιγραφής</span>", unsafe_allow_html=True)
 desc_size = st.sidebar.slider("", 10, 50, 25)
 
-# styled title for logo uploader matching other headings
 st.markdown("<span style='font-size:20px; font-weight:bold;'>Ανέβασμα Λογοτύπου</span>", unsafe_allow_html=True)
-# remove default label so widget appears directly under title
 logo_file = st.file_uploader("", type=["png", "jpg", "jpeg"])
 
-# tighten spacing between labels and their inputs via small CSS hack
 st.markdown("""
     <style>
-    /* reduce bottom margin on widget rows to bring inputs closer to titles */
     div[data-baseweb="file-uploader"],
     div.stTextInput, div.stTextArea {
         margin-top: 0.2rem !important;
         margin-bottom: 0.2rem !important;
     }
-    </style>
-""", unsafe_allow_html=True)
-
-# main inputs for four labels
-# add CSS for framing each label's inputs
-st.markdown("""
-    <style>
     .label-box {
         border: 1px solid #ccc;
         padding: 0.75rem;
@@ -12254,31 +12221,6 @@ st.markdown("""
         border-radius: 4px;
         background-color: #f9f9f9;
     }
-    </style>
-""", unsafe_allow_html=True)
-descs = []
-prices = []
-cols = st.columns(2)
-for i in range(4):
-    with cols[i % 2]:
-        # wrap this label's controls in a box
-        st.markdown("<div class='label-box'>", unsafe_allow_html=True)
-        # input titles
-        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Περιγραφή {i+1}</span>", unsafe_allow_html=True)
-        # provide unique keys and capture values
-        desc_val = st.text_area("", height=60, key=f"desc_{i}")
-        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Τιμή {i+1}</span>", unsafe_allow_html=True)
-        price_val = st.text_input("", "0,00", key=f"price_{i}")
-
-        # append values for later PDF generation
-        descs.append(desc_val)
-        prices.append(price_val)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# --- CSS για το Footer ---
-st.markdown(
-    """
-    <style>
     .footer {
         position: fixed;
         left: 0;
@@ -12292,12 +12234,24 @@ st.markdown(
         font-size: 12px;
     }
     </style>
-    <div class="footer">
-        Produced & designed by Apostolos Efthymiou
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
+
+descs = []
+prices = []
+cols = st.columns(2)
+for i in range(4):
+    with cols[i % 2]:
+        st.markdown("<div class='label-box'>", unsafe_allow_html=True)
+        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Περιγραφή {i+1}</span>", unsafe_allow_html=True)
+        desc_val = st.text_area("", height=60, key=f"desc_{i}")
+        st.markdown(f"<span style='font-size:20px; font-weight:bold;'>Τιμή {i+1}</span>", unsafe_allow_html=True)
+        price_val = st.text_input("", "0,00", key=f"price_{i}")
+
+        descs.append(desc_val)
+        prices.append(price_val)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown('<div class="footer">Produced & designed by Apostolos Efthymiou</div>', unsafe_allow_html=True)
 
 # Αρχικοποίηση του Session State για τα PDF
 if "pdf_vertical" not in st.session_state:
@@ -12316,7 +12270,6 @@ if st.button("Δημιουργία PDF Κάθετο"):
     }
     raw_pdf = generate_pdf_vertical(data)
     
-    # Μετατροπή σε bytes αν είναι BytesIO/buffer
     if hasattr(raw_pdf, "getvalue"):
         st.session_state["pdf_vertical"] = raw_pdf.getvalue()
     elif isinstance(raw_pdf, str):
@@ -12324,7 +12277,6 @@ if st.button("Δημιουργία PDF Κάθετο"):
     else:
         st.session_state["pdf_vertical"] = raw_pdf
 
-# Εμφάνιση του κουμπιού λήψης αν υπάρχει ετοιμο PDF
 if st.session_state["pdf_vertical"] is not None:
     st.download_button(
         label="Κατέβασμα PDF Κάθετο",
@@ -12334,7 +12286,7 @@ if st.session_state["pdf_vertical"] is not None:
         key="dl_vert"
     )
 
-st.divider()  # Διαχωριστικό
+st.divider()
 
 # --- ΟΡΙΖΟΝΤΙΟ PDF ---
 if st.button("Δημιουργία PDF Οριζόντιο"):
@@ -12347,7 +12299,6 @@ if st.button("Δημιουργία PDF Οριζόντιο"):
     }
     raw_pdf = generate_pdf_horizontal(data)
     
-    # Μετατροπή σε bytes αν είναι BytesIO/buffer
     if hasattr(raw_pdf, "getvalue"):
         st.session_state["pdf_horizontal"] = raw_pdf.getvalue()
     elif isinstance(raw_pdf, str):
@@ -12355,7 +12306,6 @@ if st.button("Δημιουργία PDF Οριζόντιο"):
     else:
         st.session_state["pdf_horizontal"] = raw_pdf
 
-# Εμφάνιση του κουμπιού λήψης αν υπάρχει έτοιμο PDF
 if st.session_state["pdf_horizontal"] is not None:
     st.download_button(
         label="Κατέβασμα PDF Οριζόντιο",
@@ -12364,4 +12314,3 @@ if st.session_state["pdf_horizontal"] is not None:
         mime="application/pdf",
         key="dl_horiz"
     )
-
