@@ -12299,28 +12299,69 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# generate/download PDF when requested
-if st.button("Δημιουργία PDF Κάθετο"):
-        data = {
-            'descs': descs,
-            'prices': prices,
-            'logo': logo_file,
-            'int_size': int_size,
-            'desc_size': desc_size,
-        }
-        pdf = generate_pdf_vertical(data)
-        # preview removed per user request; only provide download link
-        st.download_button("Κατέβασμα PDF Κάθετο", pdf, "Tags.pdf", "application/pdf")
+# Αρχικοποίηση του Session State για τα PDF
+if "pdf_vertical" not in st.session_state:
+    st.session_state["pdf_vertical"] = None
+if "pdf_horizontal" not in st.session_state:
+    st.session_state["pdf_horizontal"] = None
 
+# --- ΚΑΘΕΤΟ PDF ---
+if st.button("Δημιουργία PDF Κάθετο"):
+    data = {
+        'descs': descs,
+        'prices': prices,
+        'logo': logo_file,
+        'int_size': int_size,
+        'desc_size': desc_size,
+    }
+    raw_pdf = generate_pdf_vertical(data)
+    
+    # Μετατροπή σε bytes αν είναι BytesIO/buffer
+    if hasattr(raw_pdf, "getvalue"):
+        st.session_state["pdf_vertical"] = raw_pdf.getvalue()
+    elif isinstance(raw_pdf, str):
+        st.session_state["pdf_vertical"] = raw_pdf.encode('latin-1')
+    else:
+        st.session_state["pdf_vertical"] = raw_pdf
+
+# Εμφάνιση του κουμπιού λήψης αν υπάρχει ετοιμο PDF
+if st.session_state["pdf_vertical"] is not None:
+    st.download_button(
+        label="Κατέβασμα PDF Κάθετο",
+        data=st.session_state["pdf_vertical"],
+        file_name="Tags_Vertical.pdf",
+        mime="application/pdf",
+        key="dl_vert"
+    )
+
+st.divider()  # Διαχωριστικό
+
+# --- ΟΡΙΖΟΝΤΙΟ PDF ---
 if st.button("Δημιουργία PDF Οριζόντιο"):
-        data = {
-            'descs': descs,
-            'prices': prices,
-            'logo': logo_file,
-            'int_size': int_size,
-            'desc_size': desc_size,
-        }
-        pdf = generate_pdf_horizontal(data)
-        # preview removed per user request; only provide download link
-        st.download_button("Κατέβασμα PDF Οριζόντιο", pdf, "Tags.pdf", "application/pdf")
+    data = {
+        'descs': descs,
+        'prices': prices,
+        'logo': logo_file,
+        'int_size': int_size,
+        'desc_size': desc_size,
+    }
+    raw_pdf = generate_pdf_horizontal(data)
+    
+    # Μετατροπή σε bytes αν είναι BytesIO/buffer
+    if hasattr(raw_pdf, "getvalue"):
+        st.session_state["pdf_horizontal"] = raw_pdf.getvalue()
+    elif isinstance(raw_pdf, str):
+        st.session_state["pdf_horizontal"] = raw_pdf.encode('latin-1')
+    else:
+        st.session_state["pdf_horizontal"] = raw_pdf
+
+# Εμφάνιση του κουμπιού λήψης αν υπάρχει έτοιμο PDF
+if st.session_state["pdf_horizontal"] is not None:
+    st.download_button(
+        label="Κατέβασμα PDF Οριζόντιο",
+        data=st.session_state["pdf_horizontal"],
+        file_name="Tags_Horizontal.pdf",
+        mime="application/pdf",
+        key="dl_horiz"
+    )
 
