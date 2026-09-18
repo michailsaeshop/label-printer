@@ -1,3 +1,5 @@
+from io import BytesIO
+import os
 import streamlit as st
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
@@ -11885,9 +11887,16 @@ def generate_pdf_vertical(data):
         alignment=1
     )
 
-    # Αν υπάρχει λογότυπο, διαβάζουμε τα bytes μία φορά για να μην "αδειάζει" το stream
-    logo_bytes = data['logo'].getvalue() if data['logo'] is not None else None
-
+    # Ασφαλής ανάγνωση των bytes του λογότυπου (είτε από UploadedFile είτε από BytesIO)
+    if data['logo'] is not None:
+        if hasattr(data['logo'], 'getvalue'):
+            logo_bytes = data['logo'].getvalue()
+        else:
+            data['logo'].seek(0)
+            logo_bytes = data['logo'].read()
+    else:
+        logo_bytes = None
+        
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + label_h
@@ -12052,8 +12061,15 @@ def generate_pdf_horizontal(data):
         alignment=1
     )
 
-    # Αν υπάρχει λογότυπο, διαβάζουμε τα bytes μία φορά
-    logo_bytes = data['logo'].getvalue() if data['logo'] is not None else None
+   # Ασφαλής ανάγνωση των bytes του λογότυπου (είτε από UploadedFile είτε από BytesIO)
+    if data['logo'] is not None:
+        if hasattr(data['logo'], 'getvalue'):
+            logo_bytes = data['logo'].getvalue()
+        else:
+            data['logo'].seek(0)
+            logo_bytes = data['logo'].read()
+    else:
+        logo_bytes = None
 
     for i in range(4):
         x_start, y_start = quads[i]
