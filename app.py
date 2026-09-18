@@ -11866,6 +11866,8 @@ def draw_crop_marks(c, w, h):
     c.line(offset, h/2, offset + length, h/2)
     c.line(w - offset, h/2, w - offset - length, h/2)
 
+# --- ΣΥΝΑΡΤΗΣΕΙΣ ΔΗΜΙΟΥΡΓΙΑΣ PDF ---
+
 def generate_pdf_vertical(data):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -11896,7 +11898,7 @@ def generate_pdf_vertical(data):
             logo_bytes = data['logo'].read()
     else:
         logo_bytes = None
-        
+
     for i in range(4):
         x_start, y_start = quads[i]
         quad_top = y_start + label_h
@@ -12029,8 +12031,7 @@ def generate_pdf_vertical(data):
                 preserveAspectRatio=True,
                 anchor='c',
             )
-            
-    # ΠΡΟΣΘΗΚΗ: Ολοκλήρωση του PDF canvas και επιστροφή του buffer
+
     if 'draw_crop_marks' in globals():
         draw_crop_marks(c, w, h)
     c.save()
@@ -12061,7 +12062,6 @@ def generate_pdf_horizontal(data):
         alignment=1
     )
 
-   # Ασφαλής ανάγνωση των bytes του λογότυπου (είτε από UploadedFile είτε από BytesIO)
     if data['logo'] is not None:
         if hasattr(data['logo'], 'getvalue'):
             logo_bytes = data['logo'].getvalue()
@@ -12211,7 +12211,7 @@ def generate_pdf_horizontal(data):
     return buffer
 
 
-# --- GUI ---
+# --- GUI STREAMLIT ---
 
 st.sidebar.header("Ρυθμίσεις")
 st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Τιμής</span>", unsafe_allow_html=True)
@@ -12220,8 +12220,20 @@ int_size = st.sidebar.slider("", 50, 150, 120)
 st.sidebar.markdown("<span style='font-size:18px; font-weight:bold;'>Μέγεθος Περιγραφής</span>", unsafe_allow_html=True)
 desc_size = st.sidebar.slider("", 10, 50, 25)
 
+# --- ΔΙΑΧΕΙΡΙΣΗ ΛΟΓΟΤΥΠΟΥ ---
 st.markdown("<span style='font-size:20px; font-weight:bold;'>Ανέβασμα Λογοτύπου</span>", unsafe_allow_html=True)
-logo_file = st.file_uploader("", type=["png", "jpg", "jpeg"])
+uploaded_logo = st.file_uploader("", type=["png", "jpg", "jpeg"])
+
+DEFAULT_LOGO_PATH = "default_logo.png"
+
+# Επιλογή: 1. Αρχείο από τον χρήστη, 2. Προεπιλεγμένο αρχείο, 3. Κανένα
+if uploaded_logo is not None:
+    logo_file = uploaded_logo
+elif os.path.exists(DEFAULT_LOGO_PATH):
+    with open(DEFAULT_LOGO_PATH, "rb") as f:
+        logo_file = BytesIO(f.read())
+else:
+    logo_file = None
 
 st.markdown("""
     <style>
@@ -12269,7 +12281,7 @@ for i in range(4):
 
 st.markdown('<div class="footer">Produced & designed by Apostolos Efthymiou</div>', unsafe_allow_html=True)
 
-# Αρχικοποίηση του Session State για τα PDF
+# Αρχικοποίηση του Session State
 if "pdf_vertical" not in st.session_state:
     st.session_state["pdf_vertical"] = None
 if "pdf_horizontal" not in st.session_state:
